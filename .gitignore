@@ -1,0 +1,9 @@
+node_modules/
+dist/
+bin/
+build/
+.env
+*.log
+workspaces/
+data/
+.DS_Store
