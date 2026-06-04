@@ -3,7 +3,7 @@
  * the WebSocket handler, so the run payload is validated identically everywhere.
  */
 import { z } from "zod";
-import type { RunRequest } from "../types.js";
+import type { Attachment, RunRequest } from "../types.js";
 
 const PermissionModeSchema = z.enum([
   "default",
@@ -11,6 +11,34 @@ const PermissionModeSchema = z.enum([
   "bypassPermissions",
   "plan",
 ]);
+
+/** A single attachment: image or document, via inline base64 (`data`) or `url`. */
+const AttachmentSchema = z
+  .object({
+    type: z.enum(["image", "document"]),
+    media_type: z.string().optional(),
+    data: z.string().optional(),
+    url: z.string().url().optional(),
+  })
+  .refine((a) => Boolean(a.data || a.url), {
+    message: "attachment requires 'data' (base64) or 'url'",
+  });
+
+type AttachmentInput = z.infer<typeof AttachmentSchema>;
+
+/** Normalize wire attachment → internal Attachment, parsing any data: URL prefix. */
+function normalizeAttachment(a: AttachmentInput): Attachment {
+  let mediaType = a.media_type;
+  let data = a.data;
+  if (data) {
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(data);
+    if (m) {
+      mediaType = mediaType ?? m[1];
+      data = m[2];
+    }
+  }
+  return { type: a.type, mediaType, data, url: a.url };
+}
 
 /** The canonical run-request payload accepted over HTTP and WS. */
 export const RunRequestSchema = z.object({
@@ -27,6 +55,7 @@ export const RunRequestSchema = z.object({
   disallowed_tools: z.array(z.string()).optional(),
   cwd: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  attachments: z.array(AttachmentSchema).max(20).optional(),
 });
 
 export type RunRequestInput = z.infer<typeof RunRequestSchema>;
@@ -47,6 +76,7 @@ export function toRunRequest(input: RunRequestInput): RunRequest {
     disallowedTools: input.disallowed_tools,
     cwd: input.cwd,
     metadata: input.metadata,
+    attachments: input.attachments?.map(normalizeAttachment),
   };
 }
 

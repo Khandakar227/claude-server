@@ -55,7 +55,10 @@ All `/v1/*` routes require `Authorization: Bearer <AUTH_TOKEN>` (WebSocket also 
   "max_budget_usd": 0.50,                  // optional hard cost cap
   "permission_mode": "bypassPermissions",  // optional override
   "allowed_tools": ["Read","Bash"],        // optional allowlist
-  "metadata": { "tag": "demo" }            // optional, stored with session
+  "metadata": { "tag": "demo" },           // optional, stored with session
+  "attachments": [                          // optional images / documents
+    { "type": "image", "media_type": "image/png", "data": "<base64>" }
+  ]
 }
 // response
 { "session_id": "...", "result": "4", "status": "success",
@@ -114,6 +117,28 @@ npm run build          # typecheck + both of the above
 Minimum to run either: the artifact + a `.env` containing `AUTH_TOKEN` (and optionally `PORT`). After `build:bundle`/`build:exe` you can safely `rm -rf node_modules`.
 
 To override the engine path explicitly, set `CLAUDE_EXECUTABLE=/path/to/claude` in `.env`.
+
+## Attachments (images & documents)
+
+Send images or PDFs with a prompt via the optional `attachments` array (works on `/run`, `/stream`, and WS `run` frames). Each attachment is either inline base64 (`data`) or a remote `url`:
+
+```jsonc
+{
+  "user_prompt": "What's in this image?",
+  "attachments": [
+    { "type": "image", "media_type": "image/png", "data": "<base64>" },
+    { "type": "image", "data": "data:image/jpeg;base64,/9j/4AAQ..." },  // data: URL ok, media_type parsed
+    { "type": "image", "url": "https://example.com/pic.png" },           // or a URL
+    { "type": "document", "media_type": "application/pdf", "data": "<base64>" }
+  ]
+}
+```
+
+Notes:
+- `type` is `image` or `document` (PDF). Images: PNG/JPEG/GIF/WebP.
+- Provide either `data` (base64, with `media_type`) **or** `url`. A `data:` URL is accepted and its media type is auto-detected.
+- Internally the server switches to the SDK's structured-message input to attach the content blocks; everything else (sessions, streaming, ephemeral) works the same.
+- JSON body limit is 25 MB (base64 inflates ~33%). For very large files, prefer a `url`, or drop the file on disk and let the agent's `Read` tool open it by path.
 
 ## Ephemeral (temporary) chats
 

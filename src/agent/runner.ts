@@ -7,7 +7,7 @@
  * are the orchestrator's job, not the runner's.
  */
 import { mkdir } from "node:fs/promises";
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import type { RunRequest } from "../types.js";
@@ -29,6 +29,34 @@ export interface RunnerOptions {
   newSessionId?: string;
   /** When false, run ephemerally — no transcript written, not resumable. */
   persist: boolean;
+}
+
+/**
+ * Build the SDK `prompt`. With no attachments it's a plain string. With
+ * attachments we switch to streaming-input mode and yield a single structured
+ * user message whose content is the attachment blocks followed by the text.
+ */
+function buildPrompt(req: RunRequest): string | AsyncIterable<SDKUserMessage> {
+  if (!req.attachments?.length) return req.userPrompt;
+
+  const blocks: Array<Record<string, unknown>> = [];
+  for (const att of req.attachments) {
+    const source = att.url
+      ? { type: "url", url: att.url }
+      : {
+          type: "base64",
+          media_type: att.mediaType ?? (att.type === "document" ? "application/pdf" : "image/png"),
+          data: att.data,
+        };
+    blocks.push({ type: att.type, source });
+  }
+  blocks.push({ type: "text", text: req.userPrompt });
+
+  const message = { role: "user", content: blocks };
+  async function* once(): AsyncGenerator<SDKUserMessage> {
+    yield { type: "user", message, parent_tool_use_id: null } as unknown as SDKUserMessage;
+  }
+  return once();
 }
 
 /** Build the SDK `systemPrompt` option from the request. */
@@ -90,7 +118,7 @@ export async function* runAgent(
   let sawResult = false;
 
   try {
-    const stream = query({ prompt: req.userPrompt, options });
+    const stream = query({ prompt: buildPrompt(req), options });
     for await (const msg of stream) {
       for (const event of mapSdkMessage(msg)) {
         if (event.type === "result") sawResult = true;

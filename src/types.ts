@@ -3,6 +3,20 @@
  */
 import type { PermissionMode } from "./config.js";
 
+/**
+ * A multimodal attachment sent with a prompt. Either inline base64 (`data`,
+ * with `mediaType`) or a remote `url`. `image` is rendered to the model
+ * visually; `document` covers PDFs (and other doc types Claude supports).
+ */
+export interface Attachment {
+  type: "image" | "document";
+  mediaType?: string;
+  /** Base64-encoded bytes (no `data:` prefix; prefixes are stripped on input). */
+  data?: string;
+  /** Alternatively, a URL the model/SDK fetches. */
+  url?: string;
+}
+
 /** Token accounting captured from the SDK's usage object. */
 export interface TokenUsage {
   inputTokens: number;
@@ -54,6 +68,8 @@ export interface RunRequest {
   cwd?: string;
   /** Arbitrary caller metadata stored with the session. */
   metadata?: Record<string, unknown>;
+  /** Multimodal attachments (images, PDFs) to include with this prompt. */
+  attachments?: Attachment[];
 }
 
 /** Summary persisted per session in the store. */

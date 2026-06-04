@@ -23,9 +23,10 @@ export interface AppContext {
 export async function buildApp(): Promise<AppContext> {
   // Cast keeps Fastify's instance on its default logger generic so route
   // registrations type-check; pino is structurally compatible at runtime.
+  // 25 MB accommodates base64-encoded image/PDF attachments in the JSON body.
   const app = Fastify({
     loggerInstance: logger as unknown as FastifyBaseLogger,
-    bodyLimit: 5 * 1024 * 1024,
+    bodyLimit: 25 * 1024 * 1024,
   });
 
   const store = new InMemorySessionStore();
@@ -39,7 +40,7 @@ export async function buildApp(): Promise<AppContext> {
   });
 
   await app.register(websocket, {
-    options: { maxPayload: 5 * 1024 * 1024 },
+    options: { maxPayload: 25 * 1024 * 1024 },
   });
 
   registerHttpRoutes(app, { orchestrator, store });
